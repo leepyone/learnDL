@@ -155,6 +155,7 @@ if __name__ == '__main__':
     netD.apply(weights_init)
     print(netD)
     # 构建损失函数
+    # 二值交叉熵损失函数
     criterion = nn.BCELoss()
     # 高斯分布 从中获取 原始的向量
     fixed_noise = torch.randn(64, nz, 1, 1, device=device)
@@ -173,23 +174,55 @@ if __name__ == '__main__':
     print("开始训练")
     for epoch in range(num_epoch):
         print(f"第{epoch + 1}次迭代")
+        # enumerate() 函数用于将一个可遍历的数据对象(如列表、元组或字符串)组合为一个索引序列，同时列出数据和数据下标，一般用在 for 循环当中
+        # 0是设置起始下表的位置
         for i, data in enumerate(dataloader, 0):
+            # 鉴别器的更新
+            # 清空梯度
             netD.zero_grad()
+            # 拿到数据
             real_cpu = data[0].to(device)
+            # 获取到这一批的大小
             b_size = real_cpu.size(0)
+            # 获取标签
+            # 这个是构造标签的tensor full用法就是用某个数字充满
             label = torch.full((b_size,),
                                real_label, dtype=torch.float, device=device)
-
+            # 获得正向传播的结果
+            # view函数作用为重构张量的维度 这里将tensor 的维度调整到了一维
             output = netD(real_cpu).view(-1)
+            # 获得误差
             errD_real = criterion(output, label)
+            # 计算梯度
             errD_real.backwark()
+            # item() 函数获取具体的数值
             D_x = output.mean().item()
 
             noise = torch.randn(b_size, nz, 1, 1, device=device)
-            fake = (noise)
+            fake = netG(noise)
+            # 加了_ 就是原地修改
+            # 修改label成fake的标签
             label.fill_(fake_label)
+            # 返回一个新的tensor，从当前计算图中分离下来的，但是仍指向原变量的存放位置,不同之处只是requires_grad为false，得到的这个tensor永远不需要计算其梯度，不具有grad
             output = netD(fake.detach()).view(-1)
             errD_fake = criterion(output, label)
+            errD_fake.backward()
             D_G_z1 = output.mean().item()
             errD = errD_real + errD_fake
             optimizerD.step()
+            # 以上使用了 正负两种样本训练了模型，用模型正向传播了两个，然后更新一次参数
+
+            #下面是生成器的训练部分
+            netD.zero_grad()
+            label.fill_(real_label)
+            output = netD(fake).view(-1)
+            errG = criterion(output,label)
+            errG.backward()
+            D_G_z2 = output.mean().item()
+            optimizerG.step()
+
+            if(i%50==0):
+                print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
+                      % (epoch, num_epoch, i, len(dataloader),
+                         errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
+            iters+=1
