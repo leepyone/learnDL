@@ -176,6 +176,7 @@ if __name__ == '__main__':
         print(f"第{epoch + 1}次迭代")
         # enumerate() 函数用于将一个可遍历的数据对象(如列表、元组或字符串)组合为一个索引序列，同时列出数据和数据下标，一般用在 for 循环当中
         # 0是设置起始下表的位置
+        # 这边会取出所有的样本进行训练
         for i, data in enumerate(dataloader, 0):
             # 鉴别器的更新
             # 清空梯度
@@ -225,4 +226,31 @@ if __name__ == '__main__':
                 print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
                       % (epoch, num_epoch, i, len(dataloader),
                          errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
+            G_losses.append(errG.item())
+            D_losses.append(errD.item())
+            # True 的条件是 这次迭代每取出了500个batch 或者是 这是最后一次迭代并且是最后一个样本
+            if(iters%500 ==0) or ((epoch==num_epoch-1) and (i== len(dataloader-1))):
+                with torch.no_grad():
+                    fake = netG(fixed_noise).detach().cpu()
+                img_list.append(vutils.make_grid(fake,padding=2,normalize=True))
+
             iters+=1
+
+    print("训练结束")
+    plt.figure(figsize=(10,5))
+    plt.title("loss 随着迭代的变化图")
+    plt.plot(G_losses,label="G")
+    plt.plot(D_losses,label="D")
+    plt.xlabel("迭代次数")
+    plt.ylim("Loss")
+    plt.legend()
+    plt.show()
+
+
+    fig = plt.figure(figsize=(8,8))
+    plt.axis("off")
+    plt.title("生成的图片")
+    ims = [[plt.imshow(np.transpose(i,(1,2,0)),animation=True)] for i in img_list]
+    ani = animation.ArtistAnimation(fig,ims,interval=1000,repeat_delay=1000,blit=True)
+    HTML(ani.to_jshtml())
+
